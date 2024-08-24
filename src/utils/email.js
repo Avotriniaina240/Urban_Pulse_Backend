@@ -12,14 +12,14 @@ const transporter = nodemailer.createTransport({
 async function sendResetEmail(email, token) {
 
     console.log({
-        service: 'Gmail',
+        service: 'gmail',
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS,
         }
       })
     const mailOptions = {
-      from: 'rabotosonavotriniaina@gmail.com',
+      from: process.env.EMAIL_USER,
       to: email,
       subject: 'Réinitialisation du mot de passe',
       text: `Vous recevez cet email car vous avez demandé la réinitialisation du mot de passe de votre compte.\n\n

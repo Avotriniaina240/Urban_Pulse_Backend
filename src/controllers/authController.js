@@ -95,9 +95,6 @@ exports.loginController = async (req, res) => {
       email: user.email,
       role: user.role,
       token,
-      message: user.role === 'admin' ? 'Admin Connecté!' :
-               user.role === 'urbanist' ? 'Urbaniste Connecté!' :
-               'Utilisateur Connecté!',
       redirect: user.role === 'admin' ? '/admin-dashboard' :
                 user.role === 'urbanist' ? '/urbanist-dashboard' :
                 '/user-dashboard'

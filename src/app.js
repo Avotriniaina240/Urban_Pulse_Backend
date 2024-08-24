@@ -23,6 +23,8 @@ client.connect()
 app.use(cors());
 app.use(express.json()); // Middleware pour parser le JSON
 
+app.use(express.static('public'));
+
 // Utiliser les routes définies
 app.use('/api/', routes);
 
