@@ -5,7 +5,6 @@ const jwt = require('jsonwebtoken');
 const authRouter = require('./routes/auth');
 require('dotenv').config();
 
-
 // Middleware pour vérifier le rôle d'admin
 function checkAdmin(req, res, next) {
   if (req.user && req.user.role === 'admin') {
@@ -32,7 +31,7 @@ async function authenticateToken(req, res, next) {
   }
 
   const token = authorization.split(' ')[1];
-  jwt.verify(token, 'your_jwt_secret', async (err, decoded) => {
+  jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
     if (err) return res.status(403).send('Jeton invalide');
 
     try {
@@ -47,14 +46,32 @@ async function authenticateToken(req, res, next) {
   });
 }
 
-// Route pour obtenir les utilisateurs
-router.get('/users', async (req, res) => {
+// Route pour obtenir les statistiques globales des utilisateurs
+router.get('/user-stats', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM users');
-    res.json(result.rows); // Renvoie les données en format JSON
+    const result = await pool.query('SELECT COUNT(*) AS total_users FROM users');
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Erreur serveur');
+    console.error('Error fetching user stats:', err);
+    res.status(500).json({ error: 'Une erreur s\'est produite lors de la récupération des statistiques des utilisateurs.' });
+  }
+});
+
+// Route pour obtenir les statistiques mensuelles des utilisateurs
+router.get('/user-monthly-stats', async (req, res) => {
+  try {
+    const currentDate = new Date();
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+
+    const result = await pool.query(
+      'SELECT COUNT(*) AS monthly_new_users FROM users WHERE created_at >= $1',
+      [startOfMonth]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching monthly user stats:', err);
+    res.status(500).json({ error: 'Une erreur s\'est produite lors de la récupération des statistiques mensuelles des utilisateurs.' });
   }
 });
 
@@ -71,80 +88,6 @@ router.get('/admin/users', authenticateToken, checkAdmin, async (req, res) => {
   }
 });
 
-// Exemple de middleware pour l'authentification
-router.use((req, res, next) => {
-  // Supposons que l'utilisateur est stocké dans req.user après l'authentification
-  req.user = { id: 'id-de-l-utilisateur-connecté' }; // Exemple
-  next();
-});
-
-// Route pour obtenir les détails de l'utilisateur connecté
-router.get('/users/me', (req, res) => {
-  // Utilisez req.user pour obtenir les détails de l'utilisateur connecté
-  const user = { id: req.user.id, username: 'exampleUser' }; // Exemple
-  res.json(user);
-});
-
-// Route pour promouvoir un utilisateur au rôle d'admin
-router.put('/admin/promote/:id', authenticateToken, checkAdmin, async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await pool.query('UPDATE users SET role = $1 WHERE id = $2 RETURNING *', ['admin', id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    }
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Erreur serveur');
-  }
-});
-
-// Route pour obtenir les utilisateurs (accessible uniquement aux urbanists)
-router.get('/urbanist/users', authenticateToken, checkUrbanist, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM users');
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Erreur serveur');
-  }
-});
-
-// Route pour supprimer un utilisateur (accessible uniquement aux admins)
-router.delete('/admin/users/:id', authenticateToken, checkAdmin, async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    }
-    res.json({ message: 'Utilisateur supprimé avec succès' });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Erreur serveur');
-  }
-});
-
-// Route pour mettre à jour un utilisateur (accessible uniquement aux admins)
-router.put('/admin/users/:id', authenticateToken, checkAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { username, email, role } = req.body;
-  try {
-    const result = await pool.query(
-      'UPDATE users SET username = $1, email = $2, role = $3 WHERE id = $4 RETURNING *',
-      [username, email, role, id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    }
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Erreur serveur');
-  }
-});
-/*
 // Exemple de route pour récupérer les données de qualité de l'air
 router.get('/air-quality', (req, res) => {
   const airQualityData = [
@@ -157,22 +100,21 @@ router.get('/air-quality', (req, res) => {
 // Exemple de route pour récupérer les données de circulation
 router.get('/traffic-data', async (req, res) => {
   try {
-      const results = await pool.query('SELECT * FROM traffic_data');
-      res.json(results.rows);
+    const results = await pool.query('SELECT * FROM traffic_data');
+    res.json(results.rows);
   } catch (err) {
-      res.status(500).json({ error: 'Erreur lors de la récupération des données.' });
+    res.status(500).json({ error: 'Erreur lors de la récupération des données.' });
   }
 });
 
 // Exemple de route pour récupérer les données de criminalité
 router.get('/crime-data', async (req, res) => {
   try {
-      const results = await pool.query('SELECT * FROM crime_data');
-      res.json(results.rows);
+    const results = await pool.query('SELECT * FROM crime_data');
+    res.json(results.rows);
   } catch (err) {
-      res.status(500).json({ error: 'Erreur lors de la récupération des données.' });
+    res.status(500).json({ error: 'Erreur lors de la récupération des données.' });
   }
-});*/
-
+});
 
 module.exports = router;
