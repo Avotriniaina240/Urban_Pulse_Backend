@@ -71,6 +71,20 @@ router.get('/admin/users', authenticateToken, checkAdmin, async (req, res) => {
   }
 });
 
+// Exemple de middleware pour l'authentification
+router.use((req, res, next) => {
+  // Supposons que l'utilisateur est stocké dans req.user après l'authentification
+  req.user = { id: 'id-de-l-utilisateur-connecté' }; // Exemple
+  next();
+});
+
+// Route pour obtenir les détails de l'utilisateur connecté
+router.get('/users/me', (req, res) => {
+  // Utilisez req.user pour obtenir les détails de l'utilisateur connecté
+  const user = { id: req.user.id, username: 'exampleUser' }; // Exemple
+  res.json(user);
+});
+
 // Route pour promouvoir un utilisateur au rôle d'admin
 router.put('/admin/promote/:id', authenticateToken, checkAdmin, async (req, res) => {
   const { id } = req.params;
