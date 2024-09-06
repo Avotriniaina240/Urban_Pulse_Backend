@@ -6,6 +6,80 @@ const jwt = require('jsonwebtoken');
 const authRouter = require('./routes/auth');
 require('dotenv').config();
 
+const API_KEY = '13c8b873a51de1239ad5606887a1565e';
+
+// Route pour récupérer les coordonnées d'une ville
+router.get('/locations', async (req, res) => {
+    const { cities } = req.query; // Les villes sont passées en paramètre de requête
+    const cityList = cities.split(',').map(city => city.trim());
+
+    try {
+        const locationData = await Promise.all(cityList.map(async (city) => {
+            const response = await fetch(`http://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}`);
+            if (!response.ok) {
+                throw new Error(`Erreur lors de la récupération des données pour la ville : ${city}`);
+            }
+            const data = await response.json();
+            return { city, lat: data.coord.lat, lon: data.coord.lon };
+        }));
+
+        res.json(locationData);
+    } catch (error) {
+        console.error('Erreur lors de la récupération des données de localisation:', error);
+        res.status(500).json({ message: 'Erreur lors de la récupération des données de localisation' });
+    }
+});
+
+// Route pour traiter les coordonnées
+router.post('/coordinates', (req, res) => {
+    const { coordinates } = req.body; // Les coordonnées sont envoyées dans le corps de la requête
+    const coordinateList = coordinates.split(';').map(coord => {
+        const [lat, lon] = coord.split(',').map(Number);
+        return { lat, lon };
+    });
+    res.json(coordinateList);
+});
+
+// Route pour gérer les quartiers (similaire à celle des villes)
+router.get('/neighborhoods', async (req, res) => {
+    const { neighborhoods } = req.query;
+    const neighborhoodList = neighborhoods.split(',').map(neighborhood => neighborhood.trim());
+
+    try {
+        const neighborhoodData = await Promise.all(neighborhoodList.map(async (neighborhood) => {
+            const response = await fetch(`http://api.openweathermap.org/data/2.5/weather?q=${neighborhood}&appid=${API_KEY}`);
+            if (!response.ok) {
+                throw new Error(`Erreur lors de la récupération des données pour le quartier : ${neighborhood}`);
+            }
+            const data = await response.json();
+            return { neighborhood, lat: data.coord.lat, lon: data.coord.lon };
+        }));
+
+        res.json(neighborhoodData);
+    } catch (error) {
+        console.error('Erreur lors de la récupération des données des quartiers:', error);
+        res.status(500).json({ message: 'Erreur lors de la récupération des données des quartiers' });
+    }
+});
+
+// Route pour renvoyer les données combinées au front-end
+router.get('/urban-analysis', async (req, res) => {
+    const { cities, coordinates, neighborhoods } = req.query;
+
+    try {
+        const cityData = await router.handle('/locations', req, res);
+        const coordinateData = await router.handle('/coordinates', req, res);
+        const neighborhoodData = await router.handle('/neighborhoods', req, res);
+
+        const mergedData = [...cityData, ...coordinateData, ...neighborhoodData];
+        res.json(mergedData);
+    } catch (error) {
+        console.error('Erreur lors de la récupération des données combinées:', error);
+        res.status(500).json({ message: 'Erreur serveur lors de la récupération des données combinées' });
+    }
+});
+
+
 // Configure multer pour gérer les fichiers téléchargés
 const upload = multer({ dest: 'uploads/' }); // Spécifiez le dossier où les fichiers seront stockés
 
@@ -31,30 +105,6 @@ async function authenticateToken(req, res, next) {
     }
   });
 }
-
-// Route pour soumettre un rapport
-router.post('/reports', authenticateToken, upload.single('image'), async (req, res) => {
-  const { description, location } = req.body;
-  const image = req.file; // Image est accessible ici
-
-  // Vérifiez que les données sont fournies
-  if (!description || !location) {
-    return res.status(400).json({ message: 'Tous les champs sont requis' });
-  }
-
-  try {
-    // Ajoutez le rapport à la base de données
-    const result = await pool.query(
-      'INSERT INTO reports (description, location, image) VALUES ($1, $2, $3) RETURNING *',
-      [description, location, image ? image.path : null]
-    );
-
-    res.status(201).json({ message: 'Rapport soumis avec succès', report: result.rows[0] });
-  } catch (err) {
-    console.error('Erreur lors de la soumission du rapport:', err);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
 
 // Middleware pour vérifier le rôle d'admin
 function checkAdmin(req, res, next) {
@@ -85,23 +135,35 @@ router.get('/user-stats', async (req, res) => {
   }
 });
 
-// Route pour obtenir les statistiques mensuelles des utilisateurs
-router.get('/user-monthly-stats', async (req, res) => {
+// Route pour obtenir les statistiques globales des utilisateurs
+router.get('/user-stats', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT COUNT(*) AS total_users FROM users');
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching user stats:', err);
+    res.status(500).json({ error: 'Une erreur s\'est produite lors de la récupération des statistiques des utilisateurs.' });
+  }
+});
+
+// Route pour obtenir les statistiques hebdomadaires des utilisateurs
+router.get('/user-weekly-stats', async (req, res) => {
   try {
     const currentDate = new Date();
-    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const startOfWeek = new Date(currentDate.setDate(currentDate.getDate() - currentDate.getDay())); // Début de la semaine (dimanche)
 
     const result = await pool.query(
-      'SELECT COUNT(*) AS monthly_new_users FROM users WHERE created_at >= $1',
-      [startOfMonth]
+      'SELECT COUNT(*) AS weekly_new_users FROM users WHERE created_at >= $1',
+      [startOfWeek]
     );
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('Error fetching monthly user stats:', err);
-    res.status(500).json({ error: 'Une erreur s\'est produite lors de la récupération des statistiques mensuelles des utilisateurs.' });
+    console.error('Error fetching weekly user stats:', err);
+    res.status(500).json({ error: 'Une erreur s\'est produite lors de la récupération des statistiques hebdomadaires des utilisateurs.' });
   }
 });
+
 
 router.use('/auth', authRouter);
 
@@ -159,23 +221,50 @@ router.get('/air-quality', (req, res) => {
   res.json(airQualityData);
 });
 
+// Route pour soumettre un rapport
+router.post('/reports', authenticateToken, upload.single('image'), async (req, res) => {
+  const { description, location } = req.body;
+  const image = req.file; // Image est accessible ici
+  const status = 'pending'; // Statut initial du rapport
+
+  // Vérifiez que les données sont fournies
+  if (!description || !location) {
+    return res.status(400).json({ message: 'Tous les champs sont requis' });
+  }
+
+  try {
+    // Ajoutez le rapport à la base de données avec le statut
+    const result = await pool.query(
+      'INSERT INTO reports (description, location, image, status) VALUES ($1, $2, $3, $4) RETURNING *',
+      [description, location, image ? image.path : null, status]
+    );
+
+    res.status(201).json({ message: 'Rapport soumis avec succès', report: result.rows[0] });
+  } catch (err) {
+    console.error('Erreur lors de la soumission du rapport:', err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+
 // Route pour obtenir les rapports (accessible uniquement aux utilisateurs authentifiés)
 router.get('/reports', authenticateToken, async (req, res) => {
   try {
     // Sélectionner toutes les colonnes sauf `created_at`
-    const result = await pool.query('SELECT id, description, location, image FROM reports');
+    const result = await pool.query('SELECT id, description, location, image, status FROM reports');
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Aucun rapport trouvé' });
     }
 
-    // Répondre avec les rapports sans la colonne `created_at`
+    // Répondre avec les rapports, y compris le `status`
     res.status(200).json(result.rows);
   } catch (error) {
     console.error('Erreur lors de la récupération des rapports:', error.message);
     res.status(500).json({ message: 'Erreur serveur lors de la récupération des rapports' });
   }
 });
+
 
 // Route pour supprimer un signalement (accessible uniquement aux admins)
 router.delete('/reports/:id', authenticateToken, checkAdmin, async (req, res) => {
