@@ -281,40 +281,147 @@ router.delete('/reports/:id', authenticateToken, checkAdmin, async (req, res) =>
   }
 });
 
-// Route pour mettre à jour un signalement (accessible uniquement aux admins)
 router.put('/reports/:id', authenticateToken, checkAdmin, async (req, res) => {
   const { id } = req.params;
   const { description, status } = req.body;
+
+  // Validation du statut uniquement
+  const validStatuses = ['soumis', 'en attente', 'en cours', 'résolu'];
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({ message: 'Le statut est requis et doit être valide' });
+  }
+
   try {
-    const result = await pool.query(
-      'UPDATE reports SET description = $1, status = $2 WHERE id = $3 RETURNING *',
-      [description, status, id]
-    );
+    // Si la description est présente, la mettre à jour, sinon ne pas toucher au champ description
+    let query = 'UPDATE reports SET status = $1 WHERE id = $2 RETURNING *';
+    let values = [status, id];
+
+    // Si la description est fournie, l'inclure dans la requête
+    if (description) {
+      query = 'UPDATE reports SET description = $1, status = $2 WHERE id = $3 RETURNING *';
+      values = [description, status, id];
+    }
+
+    const result = await pool.query(query, values);
+
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Signalement non trouvé' });
     }
+
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err.message);
+    console.error('Erreur lors de la mise à jour du rapport:', err.message);
     res.status(500).send('Erreur serveur');
   }
 });
 
+
 router.get('/reports/statistics', async (req, res) => {
   try {
-    // Requête pour obtenir le nombre total de signalements
+    const statusFilter = req.query.status;
+
     const totalReportsResult = await pool.query('SELECT COUNT(*) AS total FROM reports');
-    
-    // Extraction du nombre total de signalements
-    const totalReports = totalReportsResult.rows[0].total;
-    
+    const totalReports = parseInt(totalReportsResult.rows[0].total, 10);
+
+    let resolvedCount = 0, pendingCount = 0, inProgressCount = 0;
+
+    // Utiliser des valeurs en français ou en anglais pour les statuts
+    if (statusFilter === 'all' || statusFilter === 'résolu' || statusFilter === 'resolved') {
+      const resolvedResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['résolu']);
+      resolvedCount = parseInt(resolvedResult.rows[0].count, 10);
+    }
+
+    if (statusFilter === 'all' || statusFilter === 'en attente' || statusFilter === 'pending') {
+      const pendingResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['en attente']);
+      pendingCount = parseInt(pendingResult.rows[0].count, 10);
+    }
+
+    if (statusFilter === 'all' || statusFilter === 'en cours' || statusFilter === 'in-progress') {
+      const inProgressResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['en cours']);
+      inProgressCount = parseInt(inProgressResult.rows[0].count, 10);
+    }
+
     res.status(200).json({
-      totalReports: parseInt(totalReports, 10), // Assurez-vous que c'est un nombre entier
+      totalReports,
+      resolved: resolvedCount,
+      pending: pendingCount,
+      inProgress: inProgressCount,
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des statistiques:', error.message);
     res.status(500).json({ message: 'Erreur serveur lors de la récupération des statistiques' });
   }
 });
+
+// Route pour créer une nouvelle discussion
+router.post('/discussions', async (req, res) => {
+  const { title, description } = req.body;
+
+  if (!title || !description) {
+    return res.status(400).json({ error: 'Titre et description sont requis.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO discussions (title, description) VALUES ($1, $2) RETURNING *',
+      [title, description]
+    );
+    res.status(201).json(result.rows[0]); // Renvoie la discussion créée
+  } catch (error) {
+    console.error('Erreur lors de la création de la discussion:', error);
+    res.status(500).json({ error: 'Erreur lors de la création de la discussion.' });
+  }
+});
+
+router.get('/discussions', async (req, res) => {
+  try {
+    // Requête pour récupérer toutes les discussions depuis la table 'discussions'
+    const result = await pool.query('SELECT * FROM discussions');
+    
+    // Envoyer les discussions en réponse
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des discussions:', error);
+    res.status(500).send('Erreur lors de la récupération des discussions');
+  }
+});
+
+// Route pour ajouter un commentaire
+router.post('/comments', authenticateToken, async (req, res) => {
+  const { discussionId, text } = req.body;
+
+  if (!discussionId || !text) {
+    return res.status(400).json({ error: 'Tous les champs sont obligatoires.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO comments (discussion_id, text) VALUES ($1, $2) RETURNING *',
+      [discussionId, text]
+    );
+
+    res.status(201).json({ message: 'Commentaire ajouté avec succès', comment: result.rows[0] });
+  } catch (err) {
+    console.error('Erreur lors de l\'ajout du commentaire:', err.message);
+    res.status(500).json({ error: 'Erreur serveur lors de l\'ajout du commentaire.' });
+  }
+});
+
+// Route pour récupérer tous les commentaires d'une discussion
+router.get('/discussions/:discussionId/comments', async (req, res) => {
+  const { discussionId } = req.params;
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM comments WHERE discussion_id = $1 ORDER BY created_at ASC',
+      [discussionId]
+    );
+    res.json({ comments: result.rows });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des commentaires:', error.message);
+    res.status(500).json({ error: 'Erreur serveur lors de la récupération des commentaires' });
+  }
+});
+
 
 module.exports = router;
