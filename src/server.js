@@ -124,43 +124,22 @@ function checkUrbanist(req, res, next) {
   }
 }
 
-// Route pour obtenir les statistiques globales des utilisateurs
 router.get('/user-stats', async (req, res) => {
   try {
-    const result = await pool.query('SELECT COUNT(*) AS total_users FROM users');
+    // Requête pour obtenir le nombre d'utilisateurs par rôle
+    const result = await pool.query(`
+      SELECT
+        COUNT(CASE WHEN role = 'citizen' THEN 1 END) AS citizen_count,
+        COUNT(CASE WHEN role = 'admin' THEN 1 END) AS admin_count,
+        COUNT(CASE WHEN role = 'urbanist' THEN 1 END) AS urbanist_count,
+        COUNT(*) AS total_users
+      FROM users
+    `);
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Error fetching user stats:', err);
     res.status(500).json({ error: 'Une erreur s\'est produite lors de la récupération des statistiques des utilisateurs.' });
-  }
-});
-
-// Route pour obtenir les statistiques globales des utilisateurs
-router.get('/user-stats', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT COUNT(*) AS total_users FROM users');
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('Error fetching user stats:', err);
-    res.status(500).json({ error: 'Une erreur s\'est produite lors de la récupération des statistiques des utilisateurs.' });
-  }
-});
-
-// Route pour obtenir les statistiques hebdomadaires des utilisateurs
-router.get('/user-weekly-stats', async (req, res) => {
-  try {
-    const currentDate = new Date();
-    const startOfWeek = new Date(currentDate.setDate(currentDate.getDate() - currentDate.getDay())); // Début de la semaine (dimanche)
-
-    const result = await pool.query(
-      'SELECT COUNT(*) AS weekly_new_users FROM users WHERE created_at >= $1',
-      [startOfWeek]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('Error fetching weekly user stats:', err);
-    res.status(500).json({ error: 'Une erreur s\'est produite lors de la récupération des statistiques hebdomadaires des utilisateurs.' });
   }
 });
 
@@ -315,44 +294,6 @@ router.put('/reports/:id', authenticateToken, checkAdmin, async (req, res) => {
   }
 });
 
-
-router.get('/reports/statistics', async (req, res) => {
-  try {
-    const statusFilter = req.query.status;
-
-    const totalReportsResult = await pool.query('SELECT COUNT(*) AS total FROM reports');
-    const totalReports = parseInt(totalReportsResult.rows[0].total, 10);
-
-    let resolvedCount = 0, pendingCount = 0, inProgressCount = 0;
-
-    // Utiliser des valeurs en français ou en anglais pour les statuts
-    if (statusFilter === 'all' || statusFilter === 'résolu' || statusFilter === 'resolved') {
-      const resolvedResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['résolu']);
-      resolvedCount = parseInt(resolvedResult.rows[0].count, 10);
-    }
-
-    if (statusFilter === 'all' || statusFilter === 'en attente' || statusFilter === 'pending') {
-      const pendingResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['en attente']);
-      pendingCount = parseInt(pendingResult.rows[0].count, 10);
-    }
-
-    if (statusFilter === 'all' || statusFilter === 'en cours' || statusFilter === 'in-progress') {
-      const inProgressResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['en cours']);
-      inProgressCount = parseInt(inProgressResult.rows[0].count, 10);
-    }
-
-    res.status(200).json({
-      totalReports,
-      resolved: resolvedCount,
-      pending: pendingCount,
-      inProgress: inProgressCount,
-    });
-  } catch (error) {
-    console.error('Erreur lors de la récupération des statistiques:', error.message);
-    res.status(500).json({ message: 'Erreur serveur lors de la récupération des statistiques' });
-  }
-});
-
 // Route pour créer une nouvelle discussion
 router.post('/discussions', async (req, res) => {
   const { title, description } = req.body;
@@ -413,15 +354,71 @@ router.get('/discussions/:discussionId/comments', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'SELECT * FROM comments WHERE discussion_id = $1 ORDER BY created_at ASC',
+      `SELECT c.id, c.text, u.username, c.created_at 
+       FROM comments c
+       JOIN users u ON c.id = u.id
+       WHERE c.discussion_id = $1
+       ORDER BY c.created_at ASC`,
       [discussionId]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Aucun commentaire trouvé' });
+    }
+
     res.json({ comments: result.rows });
   } catch (error) {
     console.error('Erreur lors de la récupération des commentaires:', error.message);
     res.status(500).json({ error: 'Erreur serveur lors de la récupération des commentaires' });
   }
 });
+
+// Route pour récupérer les informations du profil utilisateur
+router.get('/profile', authenticateToken, async (req, res) => {
+  try {
+      const userId = req.user.id; // ID de l'utilisateur à partir du token JWT
+      const query = 'SELECT username, email, phone_number, address, date_of_birth, profile_picture_url, theme, layout FROM users WHERE id = $1';
+      const result = await db.query(query, [userId]);
+
+      if (result.rows.length === 0) {
+          return res.status(404).json({ message: 'Utilisateur non trouvé' });
+      }
+
+      res.json(result.rows[0]);
+  } catch (error) {
+      console.error('Erreur lors de la récupération des informations utilisateur:', error);
+      res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+router.get('/reports/statistics', async (req, res) => {
+  try {
+    // Comptage total des rapports
+    const totalReportsResult = await pool.query('SELECT COUNT(*) AS total FROM reports');
+    const totalReports = parseInt(totalReportsResult.rows[0].total, 10);
+
+    // Comptage des rapports en fonction des statuts
+    const resolvedResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['résolu']);
+    const resolvedCount = parseInt(resolvedResult.rows[0].count, 10);
+
+    const pendingResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['en attente']);
+    const pendingCount = parseInt(pendingResult.rows[0].count, 10);
+
+    const inProgressResult = await pool.query('SELECT COUNT(*) AS count FROM reports WHERE status = $1', ['en cours']);
+    const inProgressCount = parseInt(inProgressResult.rows[0].count, 10);
+
+    res.status(200).json({
+      totalReports,
+      resolved: resolvedCount,
+      pending: pendingCount,
+      inProgress: inProgressCount,
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des statistiques:', error.message);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des statistiques' });
+  }
+});
+
 
 
 module.exports = router;
