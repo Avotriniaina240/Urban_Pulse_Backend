@@ -106,27 +106,43 @@ exports.loginController = async (req, res) => {
 }
 
 exports.registerController = async (req, res) => {
-  const { email, password, username, role = 'citizen' } = req.body;
+  const { email, password, username, role = 'citizen', phoneNumber, address, dateOfBirth, profilePictureUrl } = req.body;
 
+  // Vérification des champs requis
   if (!email || !password || !username) {
     return res.status(400).json({ message: 'Tous les champs sont requis' });
   }
 
   try {
+    // Vérifier si l'utilisateur existe déjà
     const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (userResult.rows.length > 0) {
       return res.status(400).json({ message: 'L\'utilisateur existe déjà' });
     }
 
+    // Insertion de l'utilisateur avec les nouveaux champs
     const result = await pool.query(
-      'INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4) RETURNING *',
-      [username, email, password, role]
+      `INSERT INTO users (username, email, password, role, phone_number, address, date_of_birth, profile_picture_url) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+       RETURNING *`,
+      [username, email, password, role, phoneNumber, address, dateOfBirth, profilePictureUrl]
     );
 
+    // Renvoyer les données de l'utilisateur créé
     const newUser = result.rows[0];
-    res.status(201).json({ id: newUser.id, username: newUser.username, email: newUser.email, role: newUser.role });
+    res.status(201).json({ 
+      id: newUser.id, 
+      username: newUser.username, 
+      email: newUser.email, 
+      role: newUser.role, 
+      phoneNumber: newUser.phone_number, 
+      address: newUser.address, 
+      dateOfBirth: newUser.date_of_birth, 
+      profilePictureUrl: newUser.profile_picture_url 
+    });
+
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Erreur serveur');
   }
-}
+};
