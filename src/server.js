@@ -296,16 +296,17 @@ router.put('/reports/:id', authenticateToken, checkAdmin, async (req, res) => {
 
 // Route pour créer une nouvelle discussion
 router.post('/discussions', async (req, res) => {
-  const { title, description } = req.body;
+  const { title, description, category, content, userId } = req.body; // Inclure userId
 
-  if (!title || !description) {
-    return res.status(400).json({ error: 'Titre et description sont requis.' });
+  // Vérification des champs requis
+  if (!title || !description || !category || !content || !userId) {
+    return res.status(400).json({ error: 'Titre, description, catégorie, contenu et utilisateur sont requis.' });
   }
 
   try {
     const result = await pool.query(
-      'INSERT INTO discussions (title, description) VALUES ($1, $2) RETURNING *',
-      [title, description]
+      'INSERT INTO discussions (title, description, category, content, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [title, description, category, content, userId] // Ajouter userId ici
     );
     res.status(201).json(result.rows[0]); // Renvoie la discussion créée
   } catch (error) {
@@ -314,18 +315,18 @@ router.post('/discussions', async (req, res) => {
   }
 });
 
+
+// Route pour récupérer toutes les discussions
 router.get('/discussions', async (req, res) => {
   try {
-    // Requête pour récupérer toutes les discussions depuis la table 'discussions'
     const result = await pool.query('SELECT * FROM discussions');
-    
-    // Envoyer les discussions en réponse
-    res.json(result.rows);
+    res.json(result.rows); // Renvoie toutes les discussions
   } catch (error) {
     console.error('Erreur lors de la récupération des discussions:', error);
     res.status(500).send('Erreur lors de la récupération des discussions');
   }
 });
+
 
 // Route pour ajouter un commentaire
 router.post('/comments', authenticateToken, async (req, res) => {
@@ -348,46 +349,32 @@ router.post('/comments', authenticateToken, async (req, res) => {
   }
 });
 
-// Route pour récupérer tous les commentaires d'une discussion
-router.get('/discussions/:discussionId/comments', async (req, res) => {
-  const { discussionId } = req.params;
+
+// Route pour récupérer les informations d'un utilisateur spécifique
+router.get('/api/admin/users/:id', authenticateToken, async (req, res) => {
+  const userId = req.params.id;
 
   try {
-    const result = await pool.query(
-      `SELECT c.id, c.text, u.username, c.created_at 
-       FROM comments c
-       JOIN users u ON c.id = u.id
-       WHERE c.discussion_id = $1
-       ORDER BY c.created_at ASC`,
-      [discussionId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Aucun commentaire trouvé' });
+    // Requête pour récupérer l'utilisateur en fonction de l'ID depuis la base de données
+    const user = await User.findByPk(userId); // Sequelize: 'findByPk' pour trouver par clé primaire
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
 
-    res.json({ comments: result.rows });
+    // Retourne les informations de l'utilisateur sans exposer des informations sensibles
+    const { id, username, email, phone_number, address, date_of_birth } = user;
+
+    res.json({
+      id,
+      username,
+      email,
+      phone_number,
+      address,
+      date_of_birth,
+    });
   } catch (error) {
-    console.error('Erreur lors de la récupération des commentaires:', error.message);
-    res.status(500).json({ error: 'Erreur serveur lors de la récupération des commentaires' });
-  }
-});
-
-// Route pour récupérer les informations du profil utilisateur
-router.get('/profile', authenticateToken, async (req, res) => {
-  try {
-      const userId = req.user.id; // ID de l'utilisateur à partir du token JWT
-      const query = 'SELECT username, email, phone_number, address, date_of_birth, profile_picture_url, theme, layout FROM users WHERE id = $1';
-      const result = await db.query(query, [userId]);
-
-      if (result.rows.length === 0) {
-          return res.status(404).json({ message: 'Utilisateur non trouvé' });
-      }
-
-      res.json(result.rows[0]);
-  } catch (error) {
-      console.error('Erreur lors de la récupération des informations utilisateur:', error);
-      res.status(500).json({ message: 'Erreur serveur' });
+    console.error(error);
+    res.status(500).json({ error: 'Erreur serveur lors de la récupération des données utilisateur' });
   }
 });
 
