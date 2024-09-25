@@ -406,4 +406,29 @@ router.get('/reports/statistics', async (req, res) => {
   }
 });
 
+
+// Route pour créer une nouvelle discussion
+router.post('/api/discussions', async (req, res) => {
+  const { title, description, category } = req.body;
+  const user = req.user; // Supposons que l'utilisateur connecté est stocké dans req.user
+
+  // Vérifiez si tous les champs requis sont présents
+  if (!title || !description || !category || !user) {
+    return res.status(400).json({ error: 'Titre, description, catégorie, et utilisateur sont requis.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO discussions (title, description, category, user) VALUES ($1, $2, $3, $4) RETURNING *',
+      [title, description, category, user.id] // Utilisez user.id si vous avez l'ID de l'utilisateur
+    );
+    res.status(201).json(result.rows[0]); // Retourner la nouvelle discussion créée
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur lors de la création de la discussion' });
+  }
+});
+
+
+
 module.exports = router;
