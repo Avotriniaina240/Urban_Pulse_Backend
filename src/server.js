@@ -406,29 +406,88 @@ router.get('/reports/statistics', async (req, res) => {
   }
 });
 
-
-// Route pour créer une nouvelle discussion
-router.post('/api/discussions', async (req, res) => {
-  const { title, description, category } = req.body;
-  const user = req.user; // Supposons que l'utilisateur connecté est stocké dans req.user
-
-  // Vérifiez si tous les champs requis sont présents
-  if (!title || !description || !category || !user) {
-    return res.status(400).json({ error: 'Titre, description, catégorie, et utilisateur sont requis.' });
-  }
-
+router.post('/api/posts', async (req, res) => {
+  const { title, content, author_id } = req.body;
   try {
-    const result = await pool.query(
-      'INSERT INTO discussions (title, description, category, user) VALUES ($1, $2, $3, $4) RETURNING *',
-      [title, description, category, user.id] // Utilisez user.id si vous avez l'ID de l'utilisateur
-    );
-    res.status(201).json(result.rows[0]); // Retourner la nouvelle discussion créée
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Erreur lors de la création de la discussion' });
+    await pool.query('INSERT INTO forum_posts (title, content, author_id) VALUES ($1, $2, $3)', [title, content, author_id]);
+    res.status(201).json({ message: 'Post created successfully' });
+  } catch (error) {
+    console.error('Error inserting post:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/posts', async (req, res) => {
+  const { title, content, author_id } = req.body;
+  try {
+    // Insertion du nouveau post dans la base de données
+    await pool.query('INSERT INTO forum_posts (title, content, author_id) VALUES ($1, $2, $3)', [title, content, author_id]);
+
+    // Réponse avec un message de succès et un statut 201 (Created)
+    res.status(201).json({ message: 'Post ajouté avec succès', post: { title, content, author_id } });
+  } catch (error) {
+    console.error('Error inserting post:', error);
+    // Réponse avec un message d'erreur et un statut 500 (Internal Server Error)
+    res.status(500).json({ error: 'Erreur interne du serveur' });
+  }
+});
+
+// Route pour récupérer tous les posts avec les noms d'utilisateur
+router.get('/posts', async (req, res) => {
+  try {
+    const query = `
+      SELECT fp.*, u.username
+      FROM forum_posts AS fp
+      JOIN users AS u ON fp.author_id = u.id
+    `;
+    const { rows } = await pool.query(query);
+    res.status(200).json(rows); // Répond avec la liste des posts avec noms d'utilisateur
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 
+// Route pour récupérer les informations d'un utilisateur par authorId
+router.get('/users/:authorId', async (req, res) => {
+  try {
+    const { authorId } = req.params;
+    const { rows } = await pool.query('SELECT username FROM users WHERE id = $1', [authorId]); // Remplacez 'users' et 'username' par les noms appropriés
+
+    if (rows.length > 0) {
+      res.status(200).json(rows[0]); // Renvoie le nom d'utilisateur
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/posts/:id/like', async (req, res) => {
+  const postId = req.params.id;
+  const { increment } = req.body;
+
+  if (typeof increment !== 'boolean') {
+      return res.status(400).json({ message: 'Le champ "increment" doit être un booléen.' });
+  }
+
+  try {
+      const post = await Post.findById(postId);
+      if (!post) {
+          return res.status(404).json({ message: 'Post non trouvé' });
+      }
+
+      post.likes += increment ? 1 : -1;
+      await post.save();
+
+      res.json(post);
+  } catch (error) {
+      console.error('Erreur lors de la mise à jour des likes:', error);
+      res.status(500).json({ message: 'Erreur du serveur' });
+  }
+});
 
 module.exports = router;
