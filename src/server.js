@@ -143,7 +143,6 @@ router.get('/user-stats', async (req, res) => {
   }
 });
 
-
 router.use('/auth', authRouter);
 
 // Route pour obtenir les utilisateurs (accessible uniquement aux admins)
@@ -225,7 +224,6 @@ router.post('/reports', authenticateToken, upload.single('image'), async (req, r
   }
 });
 
-
 // Route pour obtenir les rapports (accessible uniquement aux utilisateurs authentifiés)
 router.get('/reports', authenticateToken, async (req, res) => {
   try {
@@ -243,7 +241,6 @@ router.get('/reports', authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur lors de la récupération des rapports' });
   }
 });
-
 
 // Route pour supprimer un signalement (accessible uniquement aux admins)
 router.delete('/reports/:id', authenticateToken, checkAdmin, async (req, res) => {
@@ -315,7 +312,6 @@ router.post('/discussions', async (req, res) => {
   }
 });
 
-
 // Route pour récupérer toutes les discussions
 router.get('/discussions', async (req, res) => {
   try {
@@ -326,7 +322,6 @@ router.get('/discussions', async (req, res) => {
     res.status(500).send('Erreur lors de la récupération des discussions');
   }
 });
-
 
 // Route pour ajouter un commentaire
 router.post('/comments', authenticateToken, async (req, res) => {
@@ -348,7 +343,6 @@ router.post('/comments', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur lors de l\'ajout du commentaire.' });
   }
 });
-
 
 // Route pour récupérer les informations d'un utilisateur spécifique
 router.get('/api/admin/users/:id', authenticateToken, async (req, res) => {
@@ -406,6 +400,7 @@ router.get('/reports/statistics', async (req, res) => {
   }
 });
 
+// Route pour ajouter les posts
 router.post('/api/posts', async (req, res) => {
   const { title, content, author_id } = req.body;
   try {
@@ -417,6 +412,7 @@ router.post('/api/posts', async (req, res) => {
   }
 });
 
+// Route pour récupérer tous les posts avec les noms d'utilisateur
 router.post('/posts', async (req, res) => {
   const { title, content, author_id } = req.body;
   try {
@@ -448,7 +444,6 @@ router.get('/posts', async (req, res) => {
   }
 });
 
-
 // Route pour récupérer les informations d'un utilisateur par authorId
 router.get('/users/:authorId', async (req, res) => {
   try {
@@ -467,27 +462,41 @@ router.get('/users/:authorId', async (req, res) => {
 });
 
 router.patch('/posts/:id/like', async (req, res) => {
-  const postId = req.params.id;
-  const { increment } = req.body;
+  const postId = req.params.id; // Récupère l'ID du post à partir des paramètres de la requête
+  const { increment } = req.body; // Récupère le champ "increment" du corps de la requête
 
+  // Vérification que "increment" est un booléen
   if (typeof increment !== 'boolean') {
       return res.status(400).json({ message: 'Le champ "increment" doit être un booléen.' });
   }
 
   try {
-      const post = await Post.findById(postId);
-      if (!post) {
+      // Rechercher le post dans la base de données
+      const postResult = await pool.query(`SELECT * FROM forum_posts WHERE id = $1`, [postId]);
+
+      // Vérifier si le post existe
+      if (postResult.rows.length === 0) {
           return res.status(404).json({ message: 'Post non trouvé' });
       }
 
-      post.likes += increment ? 1 : -1;
-      await post.save();
+      const post = postResult.rows[0]; // Récupérer le post trouvé
 
-      res.json(post);
+      // Calculer les nouveaux likes
+      const newLikes = increment ? post.likes + 1 : Math.max(post.likes - 1, 0); // Ne pas laisser les likes devenir négatifs
+
+      // Mettre à jour les likes dans la base de données
+      await pool.query(
+          `UPDATE forum_posts SET likes = $1 WHERE id = $2 RETURNING *`,
+          [newLikes, postId]
+      );
+
+      // Envoyer la réponse avec le post mis à jour
+      res.json({ ...post, likes: newLikes }); // Retourne le post avec le nouveau nombre de likes
   } catch (error) {
-      console.error('Erreur lors de la mise à jour des likes:', error);
-      res.status(500).json({ message: 'Erreur du serveur' });
+      console.error('Erreur lors de la mise à jour des likes:', error.message); // Log l'erreur pour le débogage
+      res.status(500).json({ message: 'Erreur du serveur' }); // Envoie une réponse d'erreur au client
   }
 });
+
 
 module.exports = router;
