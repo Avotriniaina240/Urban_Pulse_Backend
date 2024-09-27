@@ -432,17 +432,33 @@ router.post('/posts', async (req, res) => {
 router.get('/posts', async (req, res) => {
   try {
     const query = `
-      SELECT fp.*, u.username
-      FROM forum_posts AS fp
-      JOIN users AS u ON fp.author_id = u.id
+      SELECT 
+        fp.*, 
+        u.username,  -- Récupérer le nom d'utilisateur associé à author_id
+        CASE 
+          WHEN COUNT(pl.id) > 0 THEN COUNT(pl.id)::TEXT 
+          ELSE NULL 
+        END AS likes
+      FROM 
+        forum_posts fp
+      LEFT JOIN 
+        post_likes pl ON fp.id = pl.post_id
+      LEFT JOIN 
+        users u ON fp.author_id = u.id  -- Correctement lié avec author_id
+      GROUP BY 
+        fp.id, u.username  -- Nécessaire pour le GROUP BY car u.username est dans la SELECT
+      ORDER BY 
+        fp.created_at DESC;
     `;
-    const { rows } = await pool.query(query);
-    res.status(200).json(rows); // Répond avec la liste des posts avec noms d'utilisateur
+
+    const { rows } = await pool.query(query); // Pas de paramètre nécessaire ici
+    res.status(200).json(rows);
   } catch (error) {
     console.error('Error fetching posts:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 // Route pour récupérer les informations d'un utilisateur par authorId
 router.get('/users/:authorId', async (req, res) => {
@@ -461,43 +477,51 @@ router.get('/users/:authorId', async (req, res) => {
   }
 });
 
-router.patch('/posts/:id/like', async (req, res) => {
-  const postId = req.params.id; // Récupère l'ID du post à partir des paramètres de la requête
-  const { increment } = req.body; // Récupère le champ "increment" du corps de la requête
+router.patch('/posts/:id/like' ,authenticateToken, async (req, res) => {
+  const postId = req.params.id; 
+  console.log(req.user)
+  const userId = req.user.id; 
+  const { increment } = req.body; 
 
-  // Vérification que "increment" est un booléen
   if (typeof increment !== 'boolean') {
-      return res.status(400).json({ message: 'Le champ "increment" doit être un booléen.' });
+    return res.status(400).json({ message: 'Le champ "increment" doit être un booléen.' });
   }
 
   try {
-      // Rechercher le post dans la base de données
-      const postResult = await pool.query(`SELECT * FROM forum_posts WHERE id = $1`, [postId]);
+    // Rechercher le post dans la base de données
+    const postResult = await pool.query(`SELECT * FROM forum_posts WHERE id = $1`, [postId]);
 
-      // Vérifier si le post existe
-      if (postResult.rows.length === 0) {
-          return res.status(404).json({ message: 'Post non trouvé' });
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Post non trouvé' });
+    }
+
+    const post = postResult.rows[0]; 
+
+    if (increment) {
+      // Vérifier si l'utilisateur a déjà aimé le post
+      const likeResult = await pool.query(`SELECT * FROM post_likes WHERE post_id = $1 AND user_id = $2`, [postId, userId]);
+
+      if (likeResult.rows.length === 0) {
+        // Ajouter un nouveau like
+        await pool.query(`INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2)`, [postId, userId]);
       }
+    } else {
+      // Supprimer le like si l'utilisateur l'a déjà aimé
+      await pool.query(`DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2`, [postId, userId]);
+    }
 
-      const post = postResult.rows[0]; // Récupérer le post trouvé
+    // Compter le nombre de likes
+    const countResult = await pool.query(`SELECT COUNT(*) as likes FROM post_likes WHERE post_id = $1`, [postId]);
+    const newLikes = parseInt(countResult.rows[0].likes);
+    console.log({ ...post, likes: newLikes })
 
-      // Calculer les nouveaux likes
-      const newLikes = increment ? post.likes + 1 : Math.max(post.likes - 1, 0); // Ne pas laisser les likes devenir négatifs
-
-      // Mettre à jour les likes dans la base de données
-      await pool.query(
-          `UPDATE forum_posts SET likes = $1 WHERE id = $2 RETURNING *`,
-          [newLikes, postId]
-      );
-
-      // Envoyer la réponse avec le post mis à jour
-      res.json({ ...post, likes: newLikes }); // Retourne le post avec le nouveau nombre de likes
+    // Retourner le nombre de likes mis à jour
+    res.json({ ...post, likes: newLikes });
   } catch (error) {
-      console.error('Erreur lors de la mise à jour des likes:', error.message); // Log l'erreur pour le débogage
-      res.status(500).json({ message: 'Erreur du serveur' }); // Envoie une réponse d'erreur au client
+    console.error('Erreur lors de la mise à jour des likes:', error.message); 
+    res.status(500).json({ message: 'Erreur du serveur' }); 
   }
 });
-
 
 // Log toutes les requêtes reçues
 router.use((req, res, next) => {
@@ -546,6 +570,32 @@ router.get('/posts/:postId/comments', async (req, res) => {
     res.status(500).json({ message: 'Erreur lors de la récupération des commentaires' });
   }
 });
+
+// Récupérer les informations de l'utilisateur par ID
+router.get('/:id', async (req, res) => {
+  const userId = req.params.id;
+
+  // Vérifier si l'ID est un nombre valide
+  if (!userId || isNaN(userId)) {
+      return res.status(400).json({ message: 'ID utilisateur invalide' });
+  }
+
+  try {
+      // Requête pour récupérer l'utilisateur par ID avec toutes les informations nécessaires
+      const result = await pool.query('SELECT id, username, email, phone_number, address, date_of_birth, profile_picture_url, description FROM users WHERE id = $1', [userId]);
+      console.log(('SELECT id, username, email, phone_number, address, date_of_birth, profile_picture_url, description FROM users WHERE id = $1', [userId]))
+      if (result.rows.length > 0) {
+          res.json(result.rows[0]); // Renvoyer les données de l'utilisateur
+      } else {
+          res.status(404).json({ message: 'Utilisateur non trouvé' }); // Utilisateur introuvable
+      }
+  } catch (error) {
+      console.error('Erreur lors de la récupération des données :', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des données' }); // Erreur serveur
+  }
+});
+
+
 
 
 module.exports = router;
