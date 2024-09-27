@@ -499,4 +499,53 @@ router.patch('/posts/:id/like', async (req, res) => {
 });
 
 
+// Log toutes les requêtes reçues
+router.use((req, res, next) => {
+  next();
+});
+
+// Route pour ajouter un commentaire
+router.post('/posts/:postId/comments', async (req, res) => {
+  console.log('Handling POST request to /api/posts/:postId/comments');
+  const { postId } = req.params;
+  const { content, author_id } = req.body;
+
+ console.log(`Received comment for post ID: ${postId}`);
+  console.log(`Comment content: ${content}`);
+  console.log(`Author ID: ${author_id}`);
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO comments (content, author_id, post_id) VALUES ($1, $2, $3) RETURNING *',
+      [content, author_id, postId]
+    );
+
+    const newComment = result.rows[0];
+    console.log('New comment saved:', newComment);
+    res.status(201).json(newComment);
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout du commentaire:', error);
+    res.status(500).json({ message: `Erreur lors de l'ajout du commentaire: ${error.message}` });
+  }
+});
+
+router.get('/posts/:postId/comments', async (req, res) => {
+  const { postId } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT comments.*, users.username AS author
+      FROM comments
+      JOIN users ON comments.author_id = users.id
+      WHERE post_id = $1
+      ORDER BY comments.created_at DESC
+    `, [postId]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des commentaires:', error);
+    res.status(500).json({ message: 'Erreur lors de la récupération des commentaires' });
+  }
+});
+
+
 module.exports = router;
