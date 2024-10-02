@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const path = require('path');
 
 const app = express();
 const routes = require('./server');
@@ -23,7 +24,8 @@ client.connect()
 app.use(cors());
 app.use(express.json()); // Middleware pour parser le JSON
 
-app.use(express.static('public'));
+app.use('/uploads', express.static(path.join(__dirname,'..', 'uploads')));
+
 
 // Utiliser les routes définies
 app.use('/api/', routes);

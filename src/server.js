@@ -1,12 +1,17 @@
 const express = require('express');
 const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const pool = require('./db');
 const jwt = require('jsonwebtoken');
 const authRouter = require('./routes/auth');
 require('dotenv').config();
+const User = require('./models/User');
 
 const API_KEY = '13c8b873a51de1239ad5606887a1565e';
+
+
 
 // Route pour récupérer les coordonnées d'une ville
 router.get('/locations', async (req, res) => {
@@ -79,9 +84,56 @@ router.get('/urban-analysis', async (req, res) => {
     }
 });
 
+// Configure Multer pour sauvegarder les images dans un dossier spécifique
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = './uploads/';
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath);
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname)); // Renomme le fichier avec un timestamp
+  },
+});
 
-// Configure multer pour gérer les fichiers téléchargés
-const upload = multer({ dest: 'uploads/' }); // Spécifiez le dossier où les fichiers seront stockés
+const upload = multer({ storage: storage });
+
+// Route pour le téléchargement de l'image de profil
+router.post('/users/:id/upload-profile-picture', upload.single('profilePicture'), async (req, res) => {
+  const userId = parseInt(req.params.id); // Conversion de l'ID utilisateur en entier
+
+  if (isNaN(userId)) {
+    return res.status(400).send({ message: 'Invalid user ID' });
+  }
+
+  if (!req.file) {
+    return res.status(400).send({ message: 'No file uploaded' });
+  }
+
+  const fileUrl = `/uploads/${req.file.filename}`; // URL de l'image téléchargée
+
+  try {
+      const result = await pool.query(
+          'UPDATE users SET profile_picture_url = $1 WHERE id = $2 RETURNING *',
+          [fileUrl, userId]
+      );
+  
+      if (result.rowCount === 0) {
+          return res.status(404).send({ message: 'User not found' });
+      }
+  
+      res.send({ message: 'Profile picture uploaded successfully', fileUrl });
+  } catch (error) {
+      console.error('Erreur lors de la mise à jour de l\'image de profil:', error);
+      res.status(500).send({ message: 'Internal server error' });
+  }
+  
+});
+
+// Configure le dossier statique pour accéder aux images
+router.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Middleware d'authentification
 async function authenticateToken(req, res, next) {
@@ -412,7 +464,7 @@ router.post('/api/posts', async (req, res) => {
   }
 });
 
-// Route pour récupérer tous les posts avec les noms d'utilisateur
+// Route pour inserer les posts 
 router.post('/posts', async (req, res) => {
   const { title, content, author_id } = req.body;
   try {
@@ -451,7 +503,7 @@ router.get('/posts', async (req, res) => {
         fp.created_at DESC;
     `;
 
-    const { rows } = await pool.query(query); // Pas de paramètre nécessaire ici
+    const { rows } = await pool.query(query);
     res.status(200).json(rows);
   } catch (error) {
     console.error('Error fetching posts:', error);
@@ -571,31 +623,54 @@ router.get('/posts/:postId/comments', async (req, res) => {
   }
 });
 
-// Récupérer les informations de l'utilisateur par ID
-router.get('/:id', async (req, res) => {
-  const userId = req.params.id;
-
-  // Vérifier si l'ID est un nombre valide
-  if (!userId || isNaN(userId)) {
-      return res.status(400).json({ message: 'ID utilisateur invalide' });
-  }
-
+router.get('/users/:id', authenticateToken, async (req, res) => {
+  console.log('Route /api/users/:id appelée. Confirmation que cette route est utilisée.');
+  
+  const {userId} = req.params;
+  console.log('........', userId)
   try {
-      // Requête pour récupérer l'utilisateur par ID avec toutes les informations nécessaires
-      const result = await pool.query('SELECT id, username, email, phone_number, address, date_of_birth, profile_picture_url, description FROM users WHERE id = $1', [userId]);
-      console.log(('SELECT id, username, email, phone_number, address, date_of_birth, profile_picture_url, description FROM users WHERE id = $1', [userId]))
-      if (result.rows.length > 0) {
-          res.json(result.rows[0]); // Renvoyer les données de l'utilisateur
-      } else {
-          res.status(404).json({ message: 'Utilisateur non trouvé' }); // Utilisateur introuvable
-      }
+    if (!userId) {
+      console.log('Requête reçue sans ID utilisateur');
+      return res.status(400).json({ error: 'ID utilisateur manquant dans la requête' });
+    }
+
+    console.log(`Tentative de récupération des données pour l'utilisateur ID: ${userId}`);
+    
+    // Récupération explicite de tous les champs
+    const user = await User.findByPk(userId, {
+      attributes: ['id', 'username', 'email', 'phone_number', 'address', 'date_of_birth', 'profile_picture_url']
+    });
+
+    console.log('......', user)
+    
+    if (!user) {
+      console.log(`Aucun utilisateur trouvé pour l'ID: ${userId}`);
+      return res.status(404).json({ error: 'Utilisateur non trouvé', details: `Aucun utilisateur avec l'ID ${userId}` });
+    }
+
+    console.log('Données brutes de l\'utilisateur:', user.toJSON());
+
+    // Création d'un objet avec tous les champs, même s'ils sont null ou undefined
+    const userData = {
+      id: user.id,
+      username: user.username,
+      email: user.email || null,
+      phone_number: user.phone_number || null,
+      address: user.address || null,
+      date_of_birth: user.date_of_birth || null,
+      profile_picture_url: user.profile_picture_url || null
+    };
+
+    console.log('Données utilisateur formatées:', userData);
+    res.json(userData);
   } catch (error) {
-      console.error('Erreur lors de la récupération des données :', error);
-      res.status(500).json({ message: 'Erreur lors de la récupération des données' }); // Erreur serveur
+    console.error('Erreur lors de la récupération des données utilisateur:', error);
+    res.status(500).json({ 
+      error: 'Erreur serveur lors de la récupération des données utilisateur',
+      details: error.message,
+      stack: error.stack
+    });
   }
 });
-
-
-
 
 module.exports = router;

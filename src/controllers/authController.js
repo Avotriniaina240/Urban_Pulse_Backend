@@ -130,16 +130,16 @@ exports.registerController = async (req, res) => {
 
     // Renvoyer les données de l'utilisateur créé
     const newUser = result.rows[0];
-    res.status(201).json({ 
-      id: newUser.id, 
-      username: newUser.username, 
-      email: newUser.email, 
-      role: newUser.role, 
-      phoneNumber: newUser.phone_number, 
-      address: newUser.address, 
-      dateOfBirth: newUser.date_of_birth, 
-      profilePictureUrl: newUser.profile_picture_url 
-    });
+  res.status(201).json({
+    id: newUser.id,
+    username: newUser.username,
+    email: newUser.email,
+    role: newUser.role,
+    phoneNumber: newUser.phone_number,
+    address: newUser.address,
+    dateOfBirth: newUser.date_of_birth,
+    profilePictureUrl: newUser.profile_picture_url
+  });
 
   } catch (err) {
     console.error(err.message);
