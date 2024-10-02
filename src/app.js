@@ -22,10 +22,10 @@ client.connect()
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // Middleware pour parser le JSON
+app.use(express.json({ limit: '10mb' })); // Augmentez la limite de taille de la requête JSON
+app.use(express.urlencoded({ limit: '10mb', extended: true })); // Augmentez la limite pour les formulaires
 
 app.use('/uploads', express.static(path.join(__dirname,'..', 'uploads')));
-
 
 // Utiliser les routes définies
 app.use('/api/', routes);
@@ -33,5 +33,3 @@ app.use('/api/', routes);
 app.listen(5000, () => {
   console.log('Server running on port 5000');
 });
-
-

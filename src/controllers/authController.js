@@ -89,15 +89,20 @@ exports.loginController = async (req, res) => {
 
     const token = jwt.sign({ id: user.id }, 'your_jwt_secret', { expiresIn: '30d' });
 
-    res.json({
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      token,
-      redirect: user.role === 'admin' ? '/admin-dashboard' :
-                user.role === 'urbanist' ? '/urbanist-dashboard' :
-                '/user-dashboard'
+// Renvoyer toutes les informations de l'utilisateur
+res.json({
+  id: user.id,
+  username: user.username,
+  email: user.email,
+  role: user.role,
+  phoneNumber: user.phone_number || 'Information non disponible', // Ajouter le numéro de téléphone
+  address: user.address || 'Information non disponible', // Ajouter l'adresse
+  dateOfBirth: user.date_of_birth || 'Information non disponible', // Ajouter la date de naissance
+  profilePictureUrl: user.profile_picture_url || 'default-avatar.png', // Ajouter l'URL de l'image de profil
+  token,
+  redirect: user.role === 'admin' ? '/admin-dashboard' :
+            user.role === 'urbanist' ? '/urbanist-dashboard' :
+            '/user-dashboard'
     });
   } catch (err) {
     console.error(err.message);

@@ -101,39 +101,43 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // Route pour le téléchargement de l'image de profil
-router.post('/users/:id/upload-profile-picture', upload.single('profilePicture'), async (req, res) => {
-  const userId = parseInt(req.params.id); // Conversion de l'ID utilisateur en entier
+router.post('/users/:id/upload-profile-picture', async (req, res) => {
+  const userId = parseInt(req.params.id);
 
   if (isNaN(userId)) {
     return res.status(400).send({ message: 'Invalid user ID' });
   }
 
-  if (!req.file) {
-    return res.status(400).send({ message: 'No file uploaded' });
-  }
+  // Vérifiez que l'image est présente dans le corps de la requête
+  const { imageData } = req.body; // Assurez-vous que 'imageData' contient l'image en Base64
 
-  const fileUrl = `/uploads/${req.file.filename}`; // URL de l'image téléchargée
+  if (!imageData) {
+    return res.status(400).send({ message: 'No image data provided' });
+  }
 
   try {
-      const result = await pool.query(
-          'UPDATE users SET profile_picture_url = $1 WHERE id = $2 RETURNING *',
-          [fileUrl, userId]
-      );
-  
-      if (result.rowCount === 0) {
-          return res.status(404).send({ message: 'User not found' });
-      }
-  
-      res.send({ message: 'Profile picture uploaded successfully', fileUrl });
+    // Vous pouvez éventuellement traiter l'image ici si nécessaire
+    // Par exemple, sauvegarder l'image sur le serveur ou dans une base de données
+
+    // Pour stocker l'URL de l'image dans la base de données
+    const fileUrl = imageData; // Cela peut être une URL à partir de laquelle l'image est accessible
+
+    const result = await pool.query(
+      'UPDATE users SET profile_picture_url = $1 WHERE id = $2 RETURNING *',
+      [fileUrl, userId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).send({ message: 'User not found' });
+    }
+
+    res.send({ message: 'Profile picture uploaded successfully', fileUrl });
   } catch (error) {
-      console.error('Erreur lors de la mise à jour de l\'image de profil:', error);
-      res.status(500).send({ message: 'Internal server error' });
+    console.error('Erreur lors de la mise à jour de l\'image de profil:', error);
+    res.status(500).send({ message: 'Internal server error' });
   }
-  
 });
 
-// Configure le dossier statique pour accéder aux images
-router.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Middleware d'authentification
 async function authenticateToken(req, res, next) {
@@ -623,54 +627,5 @@ router.get('/posts/:postId/comments', async (req, res) => {
   }
 });
 
-router.get('/users/:id', authenticateToken, async (req, res) => {
-  console.log('Route /api/users/:id appelée. Confirmation que cette route est utilisée.');
-  
-  const {userId} = req.params;
-  console.log('........', userId)
-  try {
-    if (!userId) {
-      console.log('Requête reçue sans ID utilisateur');
-      return res.status(400).json({ error: 'ID utilisateur manquant dans la requête' });
-    }
-
-    console.log(`Tentative de récupération des données pour l'utilisateur ID: ${userId}`);
-    
-    // Récupération explicite de tous les champs
-    const user = await User.findByPk(userId, {
-      attributes: ['id', 'username', 'email', 'phone_number', 'address', 'date_of_birth', 'profile_picture_url']
-    });
-
-    console.log('......', user)
-    
-    if (!user) {
-      console.log(`Aucun utilisateur trouvé pour l'ID: ${userId}`);
-      return res.status(404).json({ error: 'Utilisateur non trouvé', details: `Aucun utilisateur avec l'ID ${userId}` });
-    }
-
-    console.log('Données brutes de l\'utilisateur:', user.toJSON());
-
-    // Création d'un objet avec tous les champs, même s'ils sont null ou undefined
-    const userData = {
-      id: user.id,
-      username: user.username,
-      email: user.email || null,
-      phone_number: user.phone_number || null,
-      address: user.address || null,
-      date_of_birth: user.date_of_birth || null,
-      profile_picture_url: user.profile_picture_url || null
-    };
-
-    console.log('Données utilisateur formatées:', userData);
-    res.json(userData);
-  } catch (error) {
-    console.error('Erreur lors de la récupération des données utilisateur:', error);
-    res.status(500).json({ 
-      error: 'Erreur serveur lors de la récupération des données utilisateur',
-      details: error.message,
-      stack: error.stack
-    });
-  }
-});
 
 module.exports = router;
