@@ -9,87 +9,17 @@ const authRouter = require('./routes/auth');
 const reportsRouter = require('./routes/reports');
 const discussionsRouter = require('./routes/discussions'); 
 const forumRoutes = require('./routes/forum');
+const commentRoutes = require('./routes/comments'); 
 require('dotenv').config();
 const User = require('./models/User');
 const {authenticateToken} = require('./middleware/auth');
 const {checkAdmin} = require('./middleware/autorisation');
 const {checkRole} = require('./middleware/autoRole');
+const {checkUrbanist} = require('./middleware/roleUrb');
 
 
 const API_KEY = '13c8b873a51de1239ad5606887a1565e';
 
-
-
-// Route pour récupérer les coordonnées d'une ville
-router.get('/locations', async (req, res) => {
-    const { cities } = req.query; // Les villes sont passées en paramètre de requête
-    const cityList = cities.split(',').map(city => city.trim());
-
-    try {
-        const locationData = await Promise.all(cityList.map(async (city) => {
-            const response = await fetch(`http://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}`);
-            if (!response.ok) {
-                throw new Error(`Erreur lors de la récupération des données pour la ville : ${city}`);
-            }
-            const data = await response.json();
-            return { city, lat: data.coord.lat, lon: data.coord.lon };
-        }));
-
-        res.json(locationData);
-    } catch (error) {
-        console.error('Erreur lors de la récupération des données de localisation:', error);
-        res.status(500).json({ message: 'Erreur lors de la récupération des données de localisation' });
-    }
-});
-
-// Route pour traiter les coordonnées
-router.post('/coordinates', (req, res) => {
-    const { coordinates } = req.body; // Les coordonnées sont envoyées dans le corps de la requête
-    const coordinateList = coordinates.split(';').map(coord => {
-        const [lat, lon] = coord.split(',').map(Number);
-        return { lat, lon };
-    });
-    res.json(coordinateList);
-});
-
-// Route pour gérer les quartiers (similaire à celle des villes)
-router.get('/neighborhoods', async (req, res) => {
-    const { neighborhoods } = req.query;
-    const neighborhoodList = neighborhoods.split(',').map(neighborhood => neighborhood.trim());
-
-    try {
-        const neighborhoodData = await Promise.all(neighborhoodList.map(async (neighborhood) => {
-            const response = await fetch(`http://api.openweathermap.org/data/2.5/weather?q=${neighborhood}&appid=${API_KEY}`);
-            if (!response.ok) {
-                throw new Error(`Erreur lors de la récupération des données pour le quartier : ${neighborhood}`);
-            }
-            const data = await response.json();
-            return { neighborhood, lat: data.coord.lat, lon: data.coord.lon };
-        }));
-
-        res.json(neighborhoodData);
-    } catch (error) {
-        console.error('Erreur lors de la récupération des données des quartiers:', error);
-        res.status(500).json({ message: 'Erreur lors de la récupération des données des quartiers' });
-    }
-});
-
-// Route pour renvoyer les données combinées au front-end
-router.get('/urban-analysis', async (req, res) => {
-    const { cities, coordinates, neighborhoods } = req.query;
-
-    try {
-        const cityData = await router.handle('/locations', req, res);
-        const coordinateData = await router.handle('/coordinates', req, res);
-        const neighborhoodData = await router.handle('/neighborhoods', req, res);
-
-        const mergedData = [...cityData, ...coordinateData, ...neighborhoodData];
-        res.json(mergedData);
-    } catch (error) {
-        console.error('Erreur lors de la récupération des données combinées:', error);
-        res.status(500).json({ message: 'Erreur serveur lors de la récupération des données combinées' });
-    }
-});
 
 // Configure Multer pour sauvegarder les images dans un dossier spécifique
 const storage = multer.diskStorage({
@@ -145,15 +75,6 @@ router.post('/users/:id/upload-profile-picture', async (req, res) => {
   }
 });
 
-// Middleware pour vérifier le rôle d'urbanist
-function checkUrbanist(req, res, next) {
-  if (req.user && req.user.role === 'urbanist') {
-    next();
-  } else {
-    res.status(403).json({ message: 'Accès interdit' });
-  }
-}
-
 // Route pour mettre à jour un utilisateur (accessible uniquement aux admins)
 router.put('/admin/users/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
   const { id } = req.params;
@@ -200,6 +121,9 @@ router.use('/discussions', discussionsRouter);
 
 router.use('/posts', forumRoutes);
 
+router.use('/comments', commentRoutes);
+
+
 // Route pour obtenir les utilisateurs (accessible uniquement aux admins)
 router.get('/admin/users', authenticateToken, checkRole(['admin']), async (req, res) => {
   try {
@@ -209,9 +133,8 @@ router.get('/admin/users', authenticateToken, checkRole(['admin']), async (req, 
     console.error(err.message);
     res.status(500).send('Erreur serveur');
   }
-}); 
+});
 
-// Route pour supprimer un utilisateur (accessible uniquement aux admins)
 router.delete('/admin/users/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
   const { id } = req.params;
   try {
@@ -225,39 +148,6 @@ router.delete('/admin/users/:id', authenticateToken, checkRole(['admin']), async
     res.status(500).send('Erreur serveur');
   }
 });
-
-// Exemple de route pour récupérer les données de qualité de l'air
-router.get('/air-quality', (req, res) => {
-  const airQualityData = [
-    { city: 'City A', AQI: 45 },
-    { city: 'City B', AQI: 60 },
-  ];
-  res.json(airQualityData);
-});
-
-// Route pour ajouter un commentaire
-router.post('/comments', authenticateToken, async (req, res) => {
-  const { discussionId, text } = req.body;
-
-  if (!discussionId || !text) {
-    return res.status(400).json({ error: 'Tous les champs sont obligatoires.' });
-  }
-
-  try {
-    const result = await pool.query(
-      'INSERT INTO comments (discussion_id, text) VALUES ($1, $2) RETURNING *',
-      [discussionId, text]
-    );
-
-    res.status(201).json({ message: 'Commentaire ajouté avec succès', comment: result.rows[0] });
-  } catch (err) {
-    console.error('Erreur lors de l\'ajout du commentaire:', err.message);
-    res.status(500).json({ error: 'Erreur serveur lors de l\'ajout du commentaire.' });
-  }
-});
-
-
-
 
 // Log toutes les requêtes reçues
 router.use((req, res, next) => {
