@@ -22,9 +22,112 @@ const storage = multer.diskStorage({
   
   const upload = multer({ storage: storage });
 
+/**
+ * @swagger
+ * /:
+ *   post:
+ *     summary: Soumettre un rapport
+ *     tags: [Rapports]
+ *     security:
+ *       - BearerAuth: []  # Indique que l'authentification est requise
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Titre du rapport
+ *                 example: "Problème de circulation"
+ *               description:
+ *                 type: string
+ *                 description: Description détaillée du rapport
+ *                 example: "Il y a un embouteillage important à l'entrée de la ville."
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image associée au rapport (facultatif)
+ *     responses:
+ *       201:
+ *         description: Rapport soumis avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                   description: ID du rapport soumis
+ *                   example: 1
+ *                 title:
+ *                   type: string
+ *                   description: Titre du rapport
+ *                   example: "Problème de circulation"
+ *                 description:
+ *                   type: string
+ *                   description: Description du rapport
+ *                   example: "Il y a un embouteillage important à l'entrée de la ville."
+ *                 imageUrl:
+ *                   type: string
+ *                   description: URL de l'image soumise
+ *                   example: "http://example.com/images/report.jpg"
+ *       400:
+ *         description: Erreur de validation des données du rapport
+ *       401:
+ *         description: Non autorisé, token d'authentification manquant ou invalide
+ *       500:
+ *         description: Erreur interne du serveur
+ */
 // Route soumettre un rapport
 router.post('/', authenticateToken, upload.single('image'), reportController.submitReport);
 
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: Récupérer tous les rapports
+ *     tags: [Rapports]
+ *     security:
+ *       - BearerAuth: []  # Indique que l'authentification est requise
+ *     responses:
+ *       200:
+ *         description: Liste des rapports récupérés avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                     description: ID du rapport
+ *                     example: 1
+ *                   description:
+ *                     type: string
+ *                     description: Description du rapport
+ *                     example: "Il y a un embouteillage important à l'entrée de la ville."
+ *                   location:
+ *                     type: string
+ *                     description: Localisation du rapport
+ *                     example: "Entrée de la ville"
+ *                   image:
+ *                     type: string
+ *                     description: URL de l'image associée au rapport
+ *                     example: "http://example.com/images/report.jpg"
+ *                   status:
+ *                     type: string
+ *                     description: Statut du rapport
+ *                     example: "soumis"
+ *       404:
+ *         description: Aucun rapport trouvé
+ *       401:
+ *         description: Non autorisé, token d'authentification manquant ou invalide
+ *       500:
+ *         description: Erreur interne du serveur
+ */
 // Route GET pour obtenir les rapports
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -56,6 +159,58 @@ router.delete('/:id', authenticateToken, checkAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /{id}:
+ *   delete:
+ *     summary: Supprimer un signalement
+ *     tags: [Rapports]
+ *     security:
+ *       - BearerAuth: []  # Indique que l'authentification est requise
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: ID du signalement à supprimer
+ *         schema:
+ *           type: integer
+ *           example: 1
+ *     responses:
+ *       200:
+ *         description: Signalement supprimé avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Signalement supprimé avec succès"
+ *       404:
+ *         description: Signalement non trouvé
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Signalement non trouvé"
+ *       403:
+ *         description: Non autorisé, accès refusé (utilisateur non admin)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Accès refusé : utilisateur non autorisé"
+ *       401:
+ *         description: Non autorisé, token d'authentification manquant ou invalide
+ *       500:
+ *         description: Erreur interne du serveur
+ */
 router.put('/:id', authenticateToken, checkAdmin, async (req, res) => {
   const { id } = req.params;
   const { description, status } = req.body;
@@ -90,6 +245,43 @@ router.put('/:id', authenticateToken, checkAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /statistics:
+ *   get:
+ *     summary: Récupérer les statistiques des rapports
+ *     tags: [Rapports]
+ *     responses:
+ *       200:
+ *         description: Statistiques des rapports récupérées avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalReports:
+ *                   type: integer
+ *                   example: 150
+ *                 resolved:
+ *                   type: integer
+ *                   example: 75
+ *                 pending:
+ *                   type: integer
+ *                   example: 50
+ *                 inProgress:
+ *                   type: integer
+ *                   example: 25
+ *       500:
+ *         description: Erreur interne du serveur lors de la récupération des statistiques
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Erreur serveur lors de la récupération des statistiques"
+ */
 router.get('/statistics', async (req, res) => {
   try {
     // Comptage total des rapports

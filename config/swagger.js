@@ -8,9 +8,9 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'API Documentation for the UrbanPulse project',
       contact: {
-        name: 'Avotra',
-        url: 'https://votre-site.com',
-        email: 'support@votre-site.com',
+        name: 'Avotriniaina',
+        url: 'http://localhost:3000',
+        email: 'rabotosonavotriniaina@gmail.com',
       },
     },
     servers: [
@@ -21,7 +21,7 @@ const swaggerOptions = {
     ],
   },
 
-  apis: ['./src/server.js'], 
+  apis: ['./src/**/*.js'],
 };
 
 const swaggerDocs = swaggerJSDoc(swaggerOptions);
