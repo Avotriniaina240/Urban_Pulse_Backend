@@ -2,8 +2,12 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const nodemailer = require('nodemailer');
 const router = express.Router();
 const pool = require('./db');
+const { Sequelize } = require('sequelize');
+const moment = require('moment');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const authRouter = require('./routes/auth');
 const reportsRouter = require('./routes/reports');
@@ -16,6 +20,12 @@ const {authenticateToken} = require('./middleware/auth');
 const {checkAdmin} = require('./middleware/autorisation');
 const {checkRole} = require('./middleware/autoRole');
 const {checkUrbanist} = require('./middleware/roleUrb');
+const UserModel = require('./models/User');
+
+
+function someFunction() {
+  const User = require('./models/User');
+}
 
 
 router.use('/auth', authRouter);
@@ -27,6 +37,7 @@ router.use('/discussions', discussionsRouter);
 router.use('/posts', forumRoutes);
 
 router.use('/comments', commentRoutes);
+
 
 /**
  * @swagger
@@ -294,128 +305,167 @@ router.get('/user-stats', async (req, res) => {
   }
 });
 
-// Configure Multer pour sauvegarder les images dans un dossier spécifique
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = './uploads/';
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath);
-    }
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname)); // Renomme le fichier avec un timestamp
-  },
-});
 
-const upload = multer({ storage: storage });
-
-/**
- * @swagger
- * /users/{id}/upload-profile-picture:
- *   post:
- *     summary: Upload a profile picture for a user
- *     description: This endpoint allows a user to upload a profile picture using Base64 image data.
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         description: ID of the user whose profile picture is being uploaded
- *         schema:
- *           type: integer
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               imageData:
- *                 type: string
- *                 description: Base64 encoded image data
- *     responses:
- *       200:
- *         description: Profile picture uploaded successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Profile picture uploaded successfully
- *                 fileUrl:
- *                   type: string
- *                   example: http://example.com/path/to/image.jpg
- *       400:
- *         description: Invalid user ID or no image data provided
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Invalid user ID
- *       404:
- *         description: User not found
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: User not found
- *       500:
- *         description: Internal server error
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Internal server error
- */
-// Route pour le téléchargement de l'image de profil
-router.post('/users/:id/upload-profile-picture', async (req, res) => {
-  const userId = parseInt(req.params.id);
-
-  if (isNaN(userId)) {
-    return res.status(400).send({ message: 'Invalid user ID' });
-  }
-
-  // Vérifiez que l'image est présente dans le corps de la requête
-  const { imageData } = req.body; // Assurez-vous que 'imageData' contient l'image en Base64
-
-  if (!imageData) {
-    return res.status(400).send({ message: 'No image data provided' });
-  }
+// Route GET pour obtenir les informations de l'utilisateur
+router.get('/users/:id', authenticateToken, async (req, res) => {
+  const userId = req.params.id; 
 
   try {
-    // Vous pouvez éventuellement traiter l'image ici si nécessaire
-    // Par exemple, sauvegarder l'image sur le serveur ou dans une base de données
-
-    // Pour stocker l'URL de l'image dans la base de données
-    const fileUrl = imageData; // Cela peut être une URL à partir de laquelle l'image est accessible
-
-    const result = await pool.query(
-      'UPDATE users SET profile_picture_url = $1 WHERE id = $2 RETURNING *',
-      [fileUrl, userId]
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(404).send({ message: 'User not found' });
+    const result = await pool.query('SELECT id, username, email, phone_number, address, date_of_birth AS "dateOfBirth", profile_picture_url AS "profilePictureUrl", role FROM users WHERE id = $1', [userId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
     }
 
-    res.send({ message: 'Profile picture uploaded successfully', fileUrl });
+    res.status(200).json(result.rows[0]); // Retourne les informations de l'utilisateur
   } catch (error) {
-    console.error('Erreur lors de la mise à jour de l\'image de profil:', error);
-    res.status(500).send({ message: 'Internal server error' });
+    console.error('Erreur lors de la récupération des informations utilisateur:', error.message);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des informations utilisateur' });
+  }
+});
+
+// Route PUT pour mettre à jour les informations de l'utilisateur
+/*router.put('/users/:id', authenticateToken, async (req, res) => {
+  const userId = req.params.id;
+  const { username, email, phoneNumber, address, dateOfBirth, profilePictureUrl } = req.body;
+
+  try {
+    const result = await pool.query(
+      'UPDATE users SET username = $1, email = $2, phone_number = $3, address = $4, date_of_birth = $5, profile_picture_url = $6 WHERE id = $7 RETURNING *',
+      [username, email, phoneNumber, address, dateOfBirth, profilePictureUrl, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    res.status(200).json(result.rows[0]); // Retourne les nouvelles informations de l'utilisateur
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour des informations utilisateur:', error.message);
+    res.status(500).json({ message: 'Erreur serveur lors de la mise à jour des informations utilisateur' });
+  }
+});*/
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'rabotosonavotriniaina@gmail.com',
+    pass: 'oflk xyto kfyw vjlt',
+  },
+});
+
+const generateResetToken = () => {
+  return crypto.randomBytes(32).toString('hex');
+};
+
+const findUserByEmail = async (email) => {
+  return await UserModel.findOne({ email });
+};
+
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    const resetToken = generateResetToken();
+    user.resetToken = resetToken;
+    user.resetTokenExpiration = Date.now() + 1000*60*10;
+    await user.save();
+
+    const mailOptions = {
+      from: 'rabotosonavotriniaina@gmail.com',
+      to: email,
+      subject: 'Réinitialisation du mot de passe',
+      text: `Veuillez utiliser ce lien pour réinitialiser votre mot de passe : http://localhost:3000/reset-password/${resetToken}`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    
+    res.json({ message: 'E-mail de réinitialisation envoyé' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 });
 
 
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+
+  try {
+    // Recherche de l'utilisateur avec le token de réinitialisation
+    const user = await User.findOne({ where: { reset_password_token: token } });
+
+    // Vérification si l'utilisateur existe
+    if (!user) {
+      return res.status(400).json({ message: 'Token invalide' });
+    }
+
+    // Vérification si le token a expiré
+    if (moment().isAfter(moment(user.resetTokenExpiration))) {
+      return res.status(400).json({ message: 'Le token a expiré' });
+    }
+
+    // Mise à jour du mot de passe
+    user.password = password;
+    user.reset_password_token = null; // Réinitialisation du token
+    user.resetTokenExpiration = null; // Réinitialisation de l'expiration du token
+    await user.save(); // Sauvegarde des changements
+
+    res.status(200).json({ message: 'Mot de passe réinitialisé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la réinitialisation du mot de passe:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la réinitialisation du mot de passe' });
+  }
+});
+
+
+
+// Route pour mettre à jour le profil utilisateur
+router.put('/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const { username, email, phoneNumber, address, dateOfBirth, profile_picture_url } = req.body;
+
+  try {
+      const query = `
+          UPDATE users 
+          SET 
+              username = $1,
+              email = $2,
+              phone_number = $3,
+              address = $4,
+              date_of_birth = $5,
+              profile_picture_url = $6,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $7
+          RETURNING *;
+      `;
+
+      const values = [
+          username,
+          email,
+          phoneNumber,
+          address,
+          dateOfBirth,
+          profile_picture_url, // Image Base64
+          id
+      ];
+
+      const result = await pool.query(query, values);
+      
+      if (result.rows.length === 0) {
+          return res.status(404).json({ message: 'Utilisateur non trouvé.' });
+      }
+
+      res.status(200).json(result.rows[0]);
+  } catch (error) {
+      console.error("Erreur lors de la mise à jour du profil:", error);
+      res.status(500).json({ message: 'Erreur du serveur.' });
+  }
+});
 
 module.exports = router;

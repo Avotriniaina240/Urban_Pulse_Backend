@@ -77,66 +77,6 @@ router.post('/login', loginController)
  */
 router.post('/register', registerController)
 
-/**
- * @swagger
- * /forgot-password:
- *   post:
- *     summary: Demander la réinitialisation du mot de passe
- *     tags: [Authentification]
- *     requestBody:
- *       description: Email pour recevoir le lien de réinitialisation du mot de passe
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *                 description: Adresse email de l'utilisateur
- *                 example: user@example.com
- *     responses:
- *       200:
- *         description: Email envoyé avec succès
- *       404:
- *         description: Utilisateur non trouvé
- */
-// Route pour demander la réinitialisation du mot de passe
-router.post('/forgot-password',forgotPassword );
- 
-/**
- * @swagger
- * /reset-password/{token}:
- *   post:
- *     summary: Réinitialiser le mot de passe
- *     tags: [Authentification]
- *     parameters:
- *       - in: path
- *         name: token
- *         required: true
- *         description: Token de réinitialisation du mot de passe
- *         schema:
- *           type: string
- *     requestBody:
- *       description: Nouveau mot de passe pour l'utilisateur
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               newPassword:
- *                 type: string
- *                 description: Nouveau mot de passe de l'utilisateur
- *                 example: newpassword123
- *     responses:
- *       200:
- *         description: Mot de passe réinitialisé avec succès
- *       400:
- *         description: Le token est invalide ou a expiré
- */
-router.post('/reset-password/:token', resetPassword);
-
   
 
 module.exports = router

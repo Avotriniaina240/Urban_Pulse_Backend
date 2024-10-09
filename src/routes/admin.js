@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { deleteUser } = require('../controllers/adminController'); // Import du contrôleur
-const authenticateToken = require('../middlewares/authenticateToken'); // Middleware d'authentification
+const { deleteUser } = require('../controllers/adminController'); 
+const authenticateToken = require('../middlewares/authenticateToken'); 
 const checkRole = require('../middlewares/checkRole');
 
 /**
