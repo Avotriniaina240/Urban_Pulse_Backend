@@ -14,6 +14,7 @@ const reportsRouter = require('./routes/reports');
 const discussionsRouter = require('./routes/discussions'); 
 const forumRoutes = require('./routes/forum');
 const commentRoutes = require('./routes/comments'); 
+const userRoutes = require('./routes/user'); 
 require('dotenv').config();
 const User = require('./models/User');
 const {authenticateToken} = require('./middleware/auth');
@@ -37,6 +38,8 @@ router.use('/discussions', discussionsRouter);
 router.use('/posts', forumRoutes);
 
 router.use('/comments', commentRoutes);
+
+router.use('/users', userRoutes);
 
 
 /**
@@ -422,8 +425,6 @@ router.post('/reset-password', async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur lors de la réinitialisation du mot de passe' });
   }
 });
-
-
 
 // Route pour mettre à jour le profil utilisateur
 router.put('/users/:id', async (req, res) => {
