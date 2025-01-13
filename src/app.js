@@ -14,8 +14,8 @@ const client = new Client({
   host: 'localhost',
   port: 5432,
   user: 'postgres',
-  password: 'chris06',
-  database: 'Projet_urban_pulse'
+  password: 'postgres',
+  database: 'projet_urban_pulse'
 });
 
 client.connect()

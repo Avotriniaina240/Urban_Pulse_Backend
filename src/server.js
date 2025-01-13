@@ -309,6 +309,7 @@ router.get('/user-stats', async (req, res) => {
 });
 
 
+
 // Route GET pour obtenir les informations de l'utilisateur
 router.get('/users/:id', authenticateToken, async (req, res) => {
   const userId = req.params.id; 

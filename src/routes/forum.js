@@ -205,30 +205,37 @@ router.get('/', async (req, res) => {
  *       500:
  *         description: Erreur interne du serveur
  */
-  router.post('/:postId/comments', async (req, res) => {
-    console.log('Handling POST request to /api/posts/:postId/comments');
-    const { postId } = req.params;
-    const { content, author_id } = req.body;
-  
-    console.log(`Received comment for post ID: ${postId}`);
-    console.log(`Comment content: ${content}`);
-    console.log(`Author ID: ${author_id}`);
-  
-    try {
-      const result = await pool.query(
-        'INSERT INTO comments (content, author_id, post_id) VALUES ($1, $2, $3) RETURNING *',
-        [content, author_id, postId]
-      );
-  
-      const newComment = result.rows[0];
-      console.log('New comment saved:', newComment);
-      res.status(201).json(newComment);
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout du commentaire:', error);
-      res.status(500).json({ message: `Erreur lors de l'ajout du commentaire: ${error.message}` });
-    }
-  });
+router.post('/:postId/comments', async (req, res) => {
+  console.log('Handling POST request to /api/posts/:postId/comments');
 
+  const { postId } = req.params;
+  const { content, author_id } = req.body;
+
+  // Validation des champs
+  if (!content || !author_id || !postId) {
+    return res.status(400).json({ message: 'Le contenu, l\'identifiant de l\'auteur et l\'identifiant du post sont requis.' });
+  }
+
+  console.log(`Received comment for post ID: ${postId}`);
+  console.log(`Comment content: ${content}`);
+  console.log(`Author ID: ${author_id}`);
+
+  try {
+    // Assurez-vous que la colonne correspond à 'content' ou 'text' selon votre table
+    const result = await pool.query(
+      'INSERT INTO comments (content, author_id, post_id) VALUES ($1, $2, $3) RETURNING *',
+      [content, author_id, postId]
+    );
+
+    const newComment = result.rows[0];
+    console.log('New comment saved:', newComment);
+
+    res.status(201).json(newComment);
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout du commentaire:', error);
+    res.status(500).json({ message: `Erreur lors de l'ajout du commentaire: ${error.message}` });
+  }
+});
 /**
  * @swagger
  * /{postId}/comments:
