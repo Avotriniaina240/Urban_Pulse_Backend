@@ -7,3 +7,8 @@ exports.createReport = async (description, location, image, status, user_id) => 
   );
   return result.rows[0];
 };
+
+exports.getAllReports = async () => {
+  const result = await pool.query('SELECT * FROM reports');
+  return result.rows;
+};
