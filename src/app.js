@@ -1,4 +1,3 @@
-const { Client } = require('pg');
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
@@ -7,20 +6,10 @@ const path = require('path');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocs = require('../config/swagger');
 
+
 const app = express();
 const routes = require('./server');
-
-const client = new Client({
-  host: 'localhost',
-  port: 5432,
-  user: 'postgres',
-  password: 'postgres',
-  database: 'projet_urban_pulse'
-});
-
-client.connect()
-  .then(() => console.log('PostgreSQL connected'))
-  .catch(err => console.error('PostgreSQL connection error:', err));
+const heatmapRoutes = require('./routes/heatmap');
 
 // Middleware
 app.use(cors());
@@ -31,6 +20,7 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // Utiliser les routes définies
 app.use('/api/', routes);
+app.use('/api', heatmapRoutes);
 
 // Documentation Swagger
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));

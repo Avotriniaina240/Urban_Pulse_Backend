@@ -22,6 +22,7 @@ const {checkAdmin} = require('./middleware/autorisation');
 const {checkRole} = require('./middleware/autoRole');
 const {checkUrbanist} = require('./middleware/roleUrb');
 const UserModel = require('./models/User');
+const heatmapRoutes = require('./routes/heatmap');
 
 
 function someFunction() {
@@ -40,6 +41,8 @@ router.use('/posts', forumRoutes);
 router.use('/comments', commentRoutes);
 
 router.use('/users', userRoutes);
+
+router.use('/api', heatmapRoutes);
 
 
 /**
