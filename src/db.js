@@ -1,16 +1,13 @@
-
 const { Pool } = require('pg');
+const connectionString = process.env.DATABASE_URL;
 
-// Créez une instance de Pool avec une paramètres de connexion
 const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'projet_urban_pulse',
-  password: 'postgres',
-  port: 5432,
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false, // requis par Railway pour sécuriser la connexion
+  },
 });
 
-// Gestion des événements du pool
 pool.on('connect', () => {
   console.log('✅ [DB] Connexion PostgreSQL Connectée 🚀');
 });
